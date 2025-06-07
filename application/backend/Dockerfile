@@ -2,7 +2,7 @@
 FROM python:3.12.6-slim AS builder
 
 # Установка build-essential для компиляции некоторых пакетов
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -19,10 +19,13 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Этап запуска
 FROM python:3.12.6-slim AS runner
 
-# Установка только необходимых зависимостей
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Установка только необходимых зависимостей и обновление пакетов безопасности
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
     libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Копирование виртуального окружения из этапа сборки
 COPY --from=builder /opt/venv /opt/venv

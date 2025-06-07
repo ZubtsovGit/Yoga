@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - 'rules/*.yml'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Настройка для сбора метрик из бэкенд-сервисов
+  - job_name: 'yoga-backends'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['admin_backend:8001', 'application_backend:8002', 'auth_backend:8005']
+        labels:
+          service: 'backend'
+
+  # Настройка для сбора метрик из фронтенд-сервисов через Nginx
+  - job_name: 'yoga-frontends'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['admin_frontend:3003', 'application_frontend:3001', 'auth_frontend:3002']
+        labels:
+          service: 'frontend' 

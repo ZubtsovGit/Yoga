@@ -2,6 +2,8 @@ name: yoga-ci/cd
 permissions:
   contents: read
   packages: write
+  security-events: write
+  actions: read
 
 on:
   push:
@@ -262,14 +264,47 @@ jobs:
       
       # Сканирование на уязвимости
       - name: Scan Docker image for vulnerabilities
+        id: trivy-scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_NAMESPACE }}/yoga-${{ matrix.service }}-backend:${{ env.VERSION }}
-          format: 'table'
-          exit-code: '0'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
+          exit-code: '1'  # Fail pipeline on critical vulnerabilities
+          cache-dir: .trivy-cache
+      
+      # Upload scan results
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && steps.trivy-scan.outcome == 'failure'
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy-${{ matrix.service }}-backend'
+      
+      # Attempt to fix vulnerabilities automatically
+      # - name: Auto-fix vulnerabilities
+      #   if: failure() && steps.trivy-scan.outcome == 'failure' && github.event_name != 'pull_request'
+      #   run: |
+      #     echo "Creating pull request to fix vulnerabilities..."
+      #     git config --global user.name "Security Bot"
+      #     git config --global user.email "security-bot@example.com"
+      #     git checkout -b fix-vulnerabilities-${{ matrix.service }}-$(date +%s)
+          
+      #     # Update base image in Dockerfile
+      #     sed -i 's/FROM python:3.12.6-slim/FROM python:3.12.6-slim-bookworm/g' ${{ matrix.service }}/backend/Dockerfile
+          
+      #     git add ${{ matrix.service }}/backend/Dockerfile
+      #     git commit -m "fix: update base image to fix vulnerabilities in ${{ matrix.service }}"
+      #     git push -u origin HEAD
+          
+      #     gh pr create --title "fix: security vulnerabilities in ${{ matrix.service }}" \
+      #                 --body "This PR fixes security vulnerabilities found by Trivy scanner. Please review the changes carefully before merging." \
+      #                 --label "security"
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
       # Move cache for next job
       - name: Move cache
