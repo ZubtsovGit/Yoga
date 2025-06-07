@@ -1,10 +1,14 @@
+version: '3.8'
+
 volumes:
   postgres_data:
+  elasticsearch-data:
 
 networks:
-  default:
+  monitoring-network:
     driver: bridge
-    name: dev
+  yoga-network:
+    external: true
 
 
 services:
@@ -21,6 +25,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     env_file:
       - .env
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.postgres.backend"
 
   auth_backend:
     build:
@@ -30,12 +39,20 @@ services:
       - "${AUTH_BACKEND_PORT}:8000"
     volumes:
       - ./auth/backend/app:/app
+      - ./utils:/app/utils
+      - ./:/workspace
     environment:
       - DATABASE_URL=${AUTH_BACKEND_DB_URL}
+      - PYTHONPATH=${PYTHONPATH}:/workspace
     env_file:
       - .env
     depends_on:
        - postgres
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.auth.backend"
 
   auth_frontend:
     build: 
@@ -45,6 +62,11 @@ services:
       - "${AUTH_FRONTEND_PORT}:3000"
     env_file:
       - .env
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.auth.frontend"
 
   application_backend:
     build: 
@@ -64,6 +86,11 @@ services:
       - ./:/workspace
     depends_on:
        - postgres
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.application.backend"
 
   application_frontend:
     build: 
@@ -73,6 +100,11 @@ services:
       - "${FRONTEND_PORT}:3000"
     env_file:
       - .env
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.application.frontend"
 
   admin_backend:
     build: 
@@ -92,6 +124,11 @@ services:
       - ./:/workspace
     depends_on:
        - postgres
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.admin.backend"
 
   admin_frontend:
     build: 
@@ -101,6 +138,11 @@ services:
       - "${ADMIN_FRONTEND_PORT}:3000"
     env_file:
       - .env
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.admin.frontend"
 
   nginx:
     build:
@@ -116,4 +158,66 @@ services:
       - admin_backend
     env_file:
       - .env
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "yoga.nginx"
+
+  elasticsearch:
+    image: elasticsearch:7.17.9
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+    networks:
+      - monitoring-network
+      - yoga-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cat/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kibana:
+    image: kibana:7.17.9
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - monitoring-network
+      - yoga-network
+
+  fluentd:
+    build:
+      context: ./fluentd
+      dockerfile: Dockerfile
+    container_name: fluentd
+    volumes:
+      - ./fluentd/conf:/fluentd/etc
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - monitoring-network
+      - yoga-network
 

@@ -1,0 +1,52 @@
+groups:
+  - name: yoga_alerts
+    rules:
+      # Алерт на высокую загрузку CPU
+      - alert: HighCPULoad
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая загрузка CPU (instance {{ $labels.instance }})"
+          description: "Загрузка CPU превышает 80%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"
+
+      # Алерт на высокое использование памяти
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокое использование памяти (instance {{ $labels.instance }})"
+          description: "Использование памяти превышает 85%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"
+
+      # Алерт на высокую загрузку диска
+      - alert: HighDiskUsage
+        expr: 100 - ((node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"}) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокое использование диска (instance {{ $labels.instance }})"
+          description: "Использование диска превышает 85%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"
+
+      # Алерт на недоступность сервиса
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Сервис недоступен (instance {{ $labels.instance }})"
+          description: "Сервис {{ $labels.job }} недоступен\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"
+
+      # Алерт на высокое количество HTTP ошибок 5xx
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100 > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Высокая частота ошибок HTTP (instance {{ $labels.instance }})"
+          description: "Процент ошибок HTTP 5xx превышает 5%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}" 

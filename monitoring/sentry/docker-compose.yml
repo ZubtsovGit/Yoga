@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:6.2
+    container_name: sentry-redis
+    restart: unless-stopped
+    networks:
+      - sentry-network
+
+  postgres:
+    image: postgres:13
+    container_name: sentry-postgres
+    environment:
+      POSTGRES_USER: sentry
+      POSTGRES_PASSWORD: sentry
+      POSTGRES_DB: sentry
+    volumes:
+      - sentry-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - sentry-network
+
+  sentry-web:
+    image: sentry:21.5.0
+    container_name: sentry-web
+    depends_on:
+      - redis
+      - postgres
+    ports:
+      - "9000:9000"
+    environment:
+      SENTRY_SECRET_KEY: '${SENTRY_SECRET_KEY}'
+      SENTRY_POSTGRES_HOST: postgres
+      SENTRY_POSTGRES_PORT: 5432
+      SENTRY_DB_USER: sentry
+      SENTRY_DB_PASSWORD: sentry
+      SENTRY_REDIS_HOST: redis
+    volumes:
+      - sentry-data:/var/lib/sentry/files
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    command: ["run", "web"]
+
+  sentry-worker:
+    image: sentry:21.5.0
+    container_name: sentry-worker
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      SENTRY_SECRET_KEY: '${SENTRY_SECRET_KEY}'
+      SENTRY_POSTGRES_HOST: postgres
+      SENTRY_POSTGRES_PORT: 5432
+      SENTRY_DB_USER: sentry
+      SENTRY_DB_PASSWORD: sentry
+      SENTRY_REDIS_HOST: redis
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    command: ["run", "worker"]
+
+  sentry-cron:
+    image: sentry:21.5.0
+    container_name: sentry-cron
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      SENTRY_SECRET_KEY: '${SENTRY_SECRET_KEY}'
+      SENTRY_POSTGRES_HOST: postgres
+      SENTRY_POSTGRES_PORT: 5432
+      SENTRY_DB_USER: sentry
+      SENTRY_DB_PASSWORD: sentry
+      SENTRY_REDIS_HOST: redis
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    command: ["run", "cron"]
+
+volumes:
+  sentry-postgres:
+  sentry-data:
+
+networks:
+  sentry-network:
+    name: sentry-network
+    driver: bridge 
